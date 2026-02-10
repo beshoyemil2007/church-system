@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة خدمة ابتدائي بنين - سحابي</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #f8fafc; }
+        .sheet-table { border-collapse: separate; border-spacing: 0; }
+        .sheet-table th, .sheet-table td { border: 1px solid #e2e8f0; padding: 4px; text-align: center; }
+        .sticky-col { position: sticky; right: 0; background: white; z-index: 10; border-left: 2px solid #cbd5e1 !important; }
+        .sticky-header { position: sticky; top: 0; background: #f1f5f9; z-index: 20; }
+        
+        .status-present { background-color: #dcfce7 !important; color: #166534; font-weight: bold; }
+        .status-absent { background-color: #fee2e2 !important; color: #991b1b; font-weight: bold; }
+        
+        .tab-active { border-bottom: 3px solid #4f46e5; color: #4f46e5; font-weight: bold; }
+        .login-screen { background: linear-gradient(135deg, #1e1b4b 0%, #4f46e5 100%); }
+        
+        .sub-header { font-size: 8px; color: #475569; background: #f1f5f9; font-weight: bold; }
+        .day-header { background: #eef2ff !important; color: #4338ca; font-weight: bold; border-bottom: 2px solid #c7d2fe !important; }
+        .today-highlight { border: 2px solid #4f46e5 !important; background-color: #eff6ff !important; }
+
+        #loading-overlay { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="p-0">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 z-[200] flex items-center justify-center hidden">
+        <div class="flex flex-col items-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <p class="mt-4 text-indigo-900 font-bold">جاري تحميل البيانات...</p>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-screen fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl text-center">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">⛪ خدمة ابتدائي بنين</h2>
+            <p class="text-gray-500 text-sm mb-6 font-bold">تسجيل الحضور والافتقاد السحابي</p>
+            
+            <div id="password-section">
+                <input type="tel" id="password-input" placeholder="كلمة المرور الرقمية" 
+                       class="w-full p-4 border rounded-xl mb-4 text-center text-xl focus:ring-2 focus:ring-indigo-500 outline-none">
+                <button onclick="checkPassword()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-bold transition shadow-lg">دخول</button>
+            </div>
+            
+            <div id="stage-select-section" class="hidden text-right mt-4">
+                <p class="mb-4 text-gray-600 font-bold text-center border-b pb-2">اختر السنة الدراسية:</p>
+                <div id="available-years-list" class="grid grid-cols-2 gap-2"></div>
+            </div>
+            <p id="login-error" class="text-red-500 mt-4 hidden text-sm font-bold">⚠️ كلمة المرور خطأ</p>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" class="hidden min-h-screen pb-20">
+        <header class="bg-white border-b p-4 flex justify-between items-center sticky top-0 z-50 shadow-sm">
+            <div>
+                <h1 class="font-bold text-indigo-900 text-sm md:text-base">خدمة ابتدائي بنين</h1>
+                <p id="current-stage-display" class="text-[10px] text-indigo-500 font-bold"></p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="save-indicator" class="text-[9px] text-green-600 font-bold opacity-0 transition-opacity">مزامنة سحابية ✓</span>
+                <button id="logout-btn" class="text-red-500 text-xs font-bold border border-red-100 px-3 py-1 rounded-lg hover:bg-red-50 transition">خروج</button>
+            </div>
+        </header>
+
+        <div id="controls-bar" class="bg-indigo-50 p-3 flex flex-wrap gap-2 items-center justify-between border-b">
+            <div class="flex items-center gap-2">
+                <label class="text-xs font-bold text-gray-600">الشهر:</label>
+                <select id="month-selector" class="p-1 text-sm rounded border border-indigo-200 outline-none bg-white">
+                    <option value="0">يناير</option>
+                    <option value="1">فبراير</option>
+                    <option value="2">مارس</option>
+                    <option value="3">أبريل</option>
+                    <option value="4">مايو</option>
+                    <option value="5">يونيو</option>
+                    <option value="6">يوليو</option>
+                    <option value="7">أغسطس</option>
+                    <option value="8">سبتمبر</option>
+                    <option value="9">أكتوبر</option>
+                    <option value="10">نوفمبر</option>
+                    <option value="11">ديسمبر</option>
+                </select>
+            </div>
+            <div id="selection-info" class="hidden flex items-center gap-2">
+                <span id="selected-count" class="bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full">0 مختار</span>
+                <button id="move-btn" class="bg-green-600 text-white text-xs px-2 py-1 rounded shadow-sm hover:bg-green-700 transition">نقل</button>
+                <button id="admin-delete-btn" class="bg-red-600 text-white text-xs px-2 py-1 rounded shadow-sm hover:bg-red-700 transition hidden">حذف</button>
+            </div>
+        </div>
+
+        <nav class="flex bg-white shadow-sm mb-2">
+            <button id="tab-btn-attendance" class="flex-1 py-4 text-center tab-active text-sm font-bold">حضور الجمعة</button>
+            <button id="tab-btn-visitation" class="flex-1 py-4 text-center text-sm font-bold">الافتقاد</button>
+        </nav>
+
+        <main id="content" class="p-2"></main>
+    </div>
+
+    <!-- Modals -->
+    <div id="import-modal" class="hidden fixed inset-0 z-[120] bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl">
+            <h3 class="font-bold mb-2 text-indigo-900">إضافة أطفال</h3>
+            <textarea id="import-textarea" class="w-full h-60 border p-2 text-sm rounded-lg mb-4" placeholder="اكتب الأسماء هنا (كل اسم في سطر)..."></textarea>
+            <div class="flex gap-2">
+                <button id="confirm-import-btn" class="flex-1 bg-indigo-600 text-white py-2 rounded font-bold hover:bg-indigo-700 transition">تأكيد الإضافة</button>
+                <button id="cancel-import-btn" class="flex-1 bg-gray-200 py-2 rounded font-bold hover:bg-gray-300 transition">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="move-modal" class="hidden fixed inset-0 z-[110] bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 class="font-bold mb-4 border-b pb-2">نقل إلى مجموعة:</h3>
+            <div id="group-list-modal" class="space-y-2 mb-4 max-h-60 overflow-y-auto"></div>
+            <button id="close-move-modal" class="w-full bg-gray-200 py-2 rounded font-bold hover:bg-gray-300 transition">إلغاء</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ⚠️ ضع بيانات Firebase الخاصة بك هنا
+        const firebaseConfig = {
+            apiKey: "YOUR-API-KEY-HERE",
+            authDomain: "YOUR-PROJECT.firebaseapp.com",
+            projectId: "YOUR-PROJECT-ID",
+            storageBucket: "YOUR-PROJECT.appspot.com",
+            messagingSenderId: "YOUR-SENDER-ID",
+            appId: "YOUR-APP-ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'church-system-boys-v3';
+
+        const ADMIN_PASS = '1980';
+        const getYearPass = (year) => `${year}${year}${year}${year}`; 
+        
+        // Structure definition - each year starts with its own general group
+        const baseStructure = {
+            '1': { name: 'أولى ابتدائي', groups: [{id: 'g1', name: 'المجموعة العامة', members: []}] },
+            '2': { name: 'ثانية ابتدائي', groups: [{id: 'g2', name: 'المجموعة العامة', members: []}] },
+            '3': { name: 'ثالثة ابتدائي', groups: [{id: 'g3', name: 'المجموعة العامة', members: []}] },
+            '4': { name: 'رابعة ابتدائي', groups: [{id: 'g4', name: 'المجموعة العامة', members: []}] },
+            '5': { name: 'خامسة ابتدائي', groups: [{id: 'g5', name: 'المجموعة العامة', members: []}] },
+            '6': { name: 'سادسة ابتدائي', groups: [{id: 'g6', name: 'المجموعة العامة', members: []}] }
+        };
+
+        // Current loaded data
+        let appData = {
+            elementary: JSON.parse(JSON.stringify(baseStructure)),
+            attendance_service: {}, 
+            attendance_mass: {}, 
+            visitation: {}
+        };
+
+        let currentContext = {
+            user: null,
+            currentYear: null,
+            isAdmin: false,
+            currentTab: 'attendance',
+            selectedMonth: new Date().getMonth()
+        };
+
+        let selectedMemberIds = [];
+        let unsubscribe = null;
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        const showLoading = (s) => document.getElementById('loading-overlay').classList.toggle('hidden', !s);
+        
+        const showSaveIndicator = () => {
+            const ind = document.getElementById('save-indicator');
+            ind.style.opacity = '1';
+            setTimeout(() => ind.style.opacity = '0', 2000);
+        };
+
+        const saveToCloud = async () => {
+            if (!currentContext.user || !currentContext.currentYear) return;
+            const docPath = `artifacts/${appId}/public/data/years_data/docs/year_${currentContext.currentYear}`;
+            const docRef = doc(db, docPath);
+            
+            try {
+                await setDoc(docRef, {
+                    structure: appData.elementary[currentContext.currentYear],
+                    attendance_service: appData.attendance_service[currentContext.currentYear] || {},
+                    attendance_mass: appData.attendance_mass[currentContext.currentYear] || {},
+                    visitation: appData.visitation[currentContext.currentYear] || {},
+                    lastUpdated: Date.now(),
+                    updatedBy: currentContext.user.uid
+                }, { merge: true });
+                showSaveIndicator();
+                console.log("✅ تم الحفظ بنجاح");
+            } catch (e) {
+                console.error("❌ فشل الحفظ:", e);
+                alert("فشل الحفظ! تحقق من الاتصال بالإنترنت");
+            }
+        };
+
+        const setupRealtimeSync = async () => {
+            if (!currentContext.user || !currentContext.currentYear) return;
+            if (unsubscribe) unsubscribe();
+            
+            const docPath = `artifacts/${appId}/public/data/years_data/docs/year_${currentContext.currentYear}`;
+            const docRef = doc(db, docPath);
+            
+            showLoading(true);
+            
+            // جلب البيانات أولاً
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data();
+                    appData.elementary[currentContext.currentYear] = cloudData.structure || baseStructure[currentContext.currentYear];
+                    appData.attendance_service[currentContext.currentYear] = cloudData.attendance_service || {};
+                    appData.attendance_mass[currentContext.currentYear] = cloudData.attendance_mass || {};
+                    appData.visitation[currentContext.currentYear] = cloudData.visitation || {};
+                    console.log("✅ تم تحميل البيانات من السحابة");
+                    render();
+                } else {
+                    console.log("⚠️ لا توجد بيانات، سيتم إنشاء ملف جديد");
+                    await saveToCloud();
+                }
+            } catch (error) {
+                console.error("❌ خطأ في تحميل البيانات:", error);
+            }
+            
+            // إعداد المزامنة الفورية
+            unsubscribe = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data();
+                    appData.elementary[currentContext.currentYear] = cloudData.structure || baseStructure[currentContext.currentYear];
+                    appData.attendance_service[currentContext.currentYear] = cloudData.attendance_service || {};
+                    appData.attendance_mass[currentContext.currentYear] = cloudData.attendance_mass || {};
+                    appData.visitation[currentContext.currentYear] = cloudData.visitation || {};
+                    render();
+                }
+                showLoading(false);
+            }, (err) => {
+                console.error("❌ خطأ في المزامنة:", err);
+                showLoading(false);
+            });
+        };
+
+        const render = () => {
+            const container = document.getElementById('content');
+            if (!currentContext.currentYear) return;
+            const yearData = appData.elementary[currentContext.currentYear];
+            document.getElementById('current-stage-display').innerText = `${yearData.name}`;
+            
+            const selInfo = document.getElementById('selection-info');
+            selInfo.classList.toggle('hidden', selectedMemberIds.length === 0);
+            document.getElementById('selected-count').innerText = `${selectedMemberIds.length} مختار`;
+            
+            if (currentContext.currentTab === 'attendance') renderAttendance(container, yearData);
+            else renderVisitation(container, yearData);
+        };
+
+        const renderAttendance = (container, yearData) => {
+            const fridays = getFridays(currentContext.selectedMonth);
+            const allMembers = [];
+            yearData.groups.forEach(g => g.members.forEach(m => allMembers.push({...m, gName: g.name})));
+            allMembers.sort((a,b)=>a.name.localeCompare(b.name));
+            
+            if (allMembers.length === 0) {
+                container.innerHTML = `<div class="p-8 text-center text-gray-400 bg-white rounded-xl border border-dashed font-bold">
+                    📝 لا يوجد أطفال مضافين لهذه السنة الدراسية حتى الآن.<br>
+                    <span class="text-indigo-600">انتقل لتبويب "الافتقاد" للإضافة.</span>
+                </div>`;
+                return;
+            }
+
+            container.innerHTML = `
+            <div class="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-100">
+                <table class="sheet-table w-full text-[10px]">
+                    <thead class="sticky-header">
+                        <tr>
+                            <th rowspan="2" class="sticky-col min-w-[30px] bg-indigo-50">م</th>
+                            <th rowspan="2" class="sticky-col min-w-[110px] right-[30px] bg-indigo-50">الاسم</th>
+                            ${fridays.map(f => `<th colspan="2" class="day-header ${f === todayStr ? 'today-highlight' : ''}">${f.split('-')[2]}</th>`).join('')}
+                        </tr>
+                        <tr>${fridays.map(f => `<th class="sub-header">قداس</th><th class="sub-header">مدارس</th>`).join('')}</tr>
+                    </thead>
+                    <tbody>
+                        ${allMembers.map((m, idx) => `
+                        <tr>
+                            <td class="sticky-col bg-gray-50 text-gray-400">${idx + 1}</td>
+                            <td class="sticky-col right-[30px] text-right font-bold bg-white border-l">${m.name}</td>
+                            ${fridays.map(f => {
+                                const s = appData.attendance_service[currentContext.currentYear]?.[f]?.[m.id] || '';
+                                const ms = appData.attendance_mass[currentContext.currentYear]?.[f]?.[m.id] || '';
+                                return `
+                                <td data-m-id="${m.id}" data-date="${f}" data-type="mass" class="attendance-cell cursor-pointer transition-colors ${ms==='✓'?'status-present':(ms==='X'?'status-absent':'')}">${ms||'-'}</td>
+                                <td data-m-id="${m.id}" data-date="${f}" data-type="service" class="attendance-cell cursor-pointer transition-colors ${s==='✓'?'status-present':(s==='X'?'status-absent':'')}">${s||'-'}</td>`;
+                            }).join('')}
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+            attachInteractions();
+        };
+
+        const renderVisitation = (container, yearData) => {
+            const fridays = getFridays(currentContext.selectedMonth);
+            let html = `<div class="flex flex-col gap-2 mb-4 px-2">
+                <button id="add-members-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl text-sm font-bold shadow-lg transition">➕ إضافة أطفال لـ ${yearData.name}</button>
+            </div>`;
+            
+            yearData.groups.forEach(g => {
+                html += `
+                    <div class="card mb-4 border-r-4 border-indigo-600 bg-white rounded-lg overflow-hidden shadow-sm border border-gray-100">
+                        <div class="p-2 bg-indigo-50 flex justify-between items-center border-b">
+                            <span class="font-bold text-xs">${g.name} (${g.members.length} طفل)</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="sheet-table w-full text-[10px]">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="w-6">م</th>
+                                        <th class="text-right pr-2 min-w-[120px]">الطفل</th>
+                                        <th class="bg-indigo-900 text-white min-w-[35px] text-[8px]">نسبة<br>الحضور</th>
+                                        ${fridays.map(f => `<th>${f.split('-')[2]}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${g.members.length === 0 ? `<tr><td colspan="${fridays.length + 3}" class="p-4 text-center text-gray-400">لا توجد أسماء مضافة</td></tr>` : 
+                                    g.members.map((m, idx) => {
+                                        let totalSlotsPossible = 0;
+                                        let attendedSlots = 0;
+                                        fridays.forEach(f => {
+                                            const sStatus = appData.attendance_service[currentContext.currentYear]?.[f]?.[m.id];
+                                            const mStatus = appData.attendance_mass[currentContext.currentYear]?.[f]?.[m.id];
+                                            if (sStatus === '✓' || sStatus === 'X') { totalSlotsPossible++; if (sStatus === '✓') attendedSlots++; }
+                                            if (mStatus === '✓' || mStatus === 'X') { totalSlotsPossible++; if (mStatus === '✓') attendedSlots++; }
+                                        });
+                                        const percentage = totalSlotsPossible > 0 ? Math.round((attendedSlots / totalSlotsPossible) * 100) : 0;
+                                        const percColor = percentage > 70 ? 'text-green-600' : (percentage > 40 ? 'text-orange-500' : 'text-red-500');
+                                        
+                                        return `
+                                        <tr class="${selectedMemberIds.includes(m.id)?'bg-indigo-50':''}">
+                                            <td class="text-gray-400 text-[8px]">${idx + 1}</td>
+                                            <td class="member-select cursor-pointer p-2 font-bold text-right hover:bg-gray-50 transition" data-m-id="${m.id}">${m.name}</td>
+                                            <td class="font-bold ${percColor}">${percentage}%</td>
+                                            ${fridays.map(f => {
+                                                const v = appData.visitation[currentContext.currentYear]?.[f]?.[m.id] || '';
+                                                let cellClass = v === '✓' ? 'status-present' : (v === 'X' ? 'status-absent' : '');
+                                                return `<td data-date="${f}" data-m-id="${m.id}" class="visitation-cell cursor-pointer transition-colors ${cellClass}">${v || '-'}</td>`;
+                                            }).join('')}
+                                        </tr>`
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML = html;
+            attachInteractions();
+        };
+
+        const attachInteractions = () => {
+            document.querySelectorAll('.attendance-cell').forEach(cell => {
+                cell.onclick = () => {
+                    const type = cell.dataset.type === 'service' ? 'attendance_service' : 'attendance_mass';
+                    const {date, mId} = cell.dataset;
+                    if (!appData[type][currentContext.currentYear]) appData[type][currentContext.currentYear] = {};
+                    if (!appData[type][currentContext.currentYear][date]) appData[type][currentContext.currentYear][date] = {};
+                    const cur = appData[type][currentContext.currentYear][date][mId] || '';
+                    appData[type][currentContext.currentYear][date][mId] = cur === '✓' ? 'X' : (cur === 'X' ? '' : '✓');
+                    saveToCloud(); render();
+                };
+            });
+            document.querySelectorAll('.visitation-cell').forEach(cell => {
+                cell.onclick = () => {
+                    const {date, mId} = cell.dataset;
+                    if (!appData.visitation[currentContext.currentYear]) appData.visitation[currentContext.currentYear] = {};
+                    if (!appData.visitation[currentContext.currentYear][date]) appData.visitation[currentContext.currentYear][date] = {};
+                    const cur = appData.visitation[currentContext.currentYear][date][mId] || '';
+                    let next = cur === '' ? '✓' : (cur === '✓' ? 'X' : '');
+                    appData.visitation[currentContext.currentYear][date][mId] = next;
+                    saveToCloud(); render();
+                };
+            });
+            document.querySelectorAll('.member-select').forEach(el => {
+                el.onclick = () => {
+                    const mId = el.dataset.mId;
+                    if (selectedMemberIds.includes(mId)) selectedMemberIds = selectedMemberIds.filter(id => id !== mId);
+                    else selectedMemberIds.push(mId);
+                    render();
+                };
+            });
+            const addBtn = document.getElementById('add-members-btn');
+            if(addBtn) addBtn.onclick = () => document.getElementById('import-modal').classList.remove('hidden');
+        };
+
+        const getFridays = (month) => {
+            let fridays = [];
+            let year = new Date().getFullYear();
+            let d = new Date(year, month, 1);
+            while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
+            while (d.getMonth() === month) {
+                fridays.push(new Date(d).toISOString().split('T')[0]);
+                d.setDate(d.getDate() + 7);
+            }
+            return fridays;
+        };
+
+        window.checkPassword = () => {
+            const input = document.getElementById('password-input').value.trim();
+            const listDiv = document.getElementById('available-years-list');
+            const errorMsg = document.getElementById('login-error');
+            listDiv.innerHTML = '';
+            errorMsg.classList.add('hidden');
+            let found = false;
+            
+            if (input === ADMIN_PASS) {
+                currentContext.isAdmin = true;
+                localStorage.setItem('is_admin_boys', 'true');
+                Object.keys(baseStructure).forEach(y => addYearButton(y));
+                found = true;
+            } else {
+                currentContext.isAdmin = false;
+                localStorage.setItem('is_admin_boys', 'false');
+                for (let year in baseStructure) {
+                    if (input === getYearPass(year)) { addYearButton(year); found = true; break; }
+                }
+            }
+            
+            if (found) {
+                document.getElementById('password-section').classList.add('hidden');
+                document.getElementById('stage-select-section').classList.remove('hidden');
+            } else {
+                errorMsg.classList.remove('hidden');
+            }
+        };
+
+        function addYearButton(year) {
+            const listDiv = document.getElementById('available-years-list');
+            const btn = document.createElement('button');
+            btn.className = "bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 font-bold text-sm shadow transition";
+            btn.innerText = baseStructure[year].name;
+            btn.onclick = () => {
+                currentContext.currentYear = year;
+                localStorage.setItem('last_year_boys', year);
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-app').classList.remove('hidden');
+                if (currentContext.isAdmin) document.getElementById('admin-delete-btn').classList.remove('hidden');
+                setupRealtimeSync();
+            };
+            listDiv.appendChild(btn);
+        }
+
+        // ✅ إصلاح زر الخروج
+        document.getElementById('logout-btn').onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if(confirm("هل تريد الخروج من النظام؟")) {
+                try {
+                    showLoading(true);
+                    
+                    // إيقاف المزامنة
+                    if (unsubscribe) {
+                        unsubscribe();
+                        unsubscribe = null;
+                    }
+                    
+                    // مسح البيانات المحلية
+                    localStorage.removeItem('last_year_boys');
+                    localStorage.removeItem('is_admin_boys');
+                    
+                    // تسجيل الخروج من Firebase
+                    await signOut(auth);
+                    
+                    // إعادة تعيين الحالة
+                    currentContext = {
+                        user: null,
+                        currentYear: null,
+                        isAdmin: false,
+                        currentTab: 'attendance',
+                        selectedMonth: new Date().getMonth()
+                    };
+                    selectedMemberIds = [];
+                    appData = {
+                        elementary: JSON.parse(JSON.stringify(baseStructure)),
+                        attendance_service: {}, 
+                        attendance_mass: {}, 
+                        visitation: {}
+                    };
+                    
+                    // إخفاء التطبيق وإظهار شاشة تسجيل الدخول
+                    document.getElementById('main-app').classList.add('hidden');
+                    document.getElementById('login-screen').classList.remove('hidden');
+                    document.getElementById('password-section').classList.remove('hidden');
+                    document.getElementById('stage-select-section').classList.add('hidden');
+                    document.getElementById('password-input').value = '';
+                    document.getElementById('login-error').classList.add('hidden');
+                    
+                    showLoading(false);
+                    console.log("✅ تم تسجيل الخروج بنجاح");
+                } catch (error) {
+                    console.error("❌ خطأ في تسجيل الخروج:", error);
+                    showLoading(false);
+                    alert("حدث خطأ أثناء تسجيل الخروج");
+                }
+            }
+        };
+
+        document.getElementById('month-selector').onchange = (e) => {
+            currentContext.selectedMonth = parseInt(e.target.value);
+            render();
+        };
+
+        const switchTab = (tab) => {
+            currentContext.currentTab = tab;
+            document.getElementById('tab-btn-attendance').classList.toggle('tab-active', tab === 'attendance');
+            document.getElementById('tab-btn-visitation').classList.toggle('tab-active', tab === 'visitation');
+            selectedMemberIds = [];
+            render();
+        };
+        document.getElementById('tab-btn-attendance').onclick = () => switchTab('attendance');
+        document.getElementById('tab-btn-visitation').onclick = () => switchTab('visitation');
+
+        document.getElementById('admin-delete-btn').onclick = () => {
+            if(!currentContext.isAdmin) return;
+            if(confirm(`هل أنت متأكد من حذف ${selectedMemberIds.length} طفل من هذه السنة؟`)) {
+                const groups = appData.elementary[currentContext.currentYear].groups;
+                groups.forEach(g => { g.members = g.members.filter(m => !selectedMemberIds.includes(m.id)); });
+                selectedMemberIds = [];
+                saveToCloud();
+                render();
+            }
+        };
+
+        document.getElementById('move-btn').onclick = () => {
+            const list = document.getElementById('group-list-modal');
+            list.innerHTML = appData.elementary[currentContext.currentYear].groups.map(g => `
+                <button data-group-id="${g.id}" class="move-target-btn w-full text-right p-3 bg-gray-50 hover:bg-indigo-50 rounded border mb-1 text-sm font-bold transition">إلى: ${g.name}</button>
+            `).join('');
+            
+            document.querySelectorAll('.move-target-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const targetGid = btn.dataset.groupId;
+                    const groups = appData.elementary[currentContext.currentYear].groups;
+                    let movedMembers = [];
+                    groups.forEach(g => {
+                        const toMove = g.members.filter(m => selectedMemberIds.includes(m.id));
+                        movedMembers.push(...toMove);
+                        g.members = g.members.filter(m => !selectedMemberIds.includes(m.id));
+                    });
+                    groups.find(g => g.id === targetGid).members.push(...movedMembers);
+                    selectedMemberIds = [];
+                    document.getElementById('move-modal').classList.add('hidden');
+                    saveToCloud();
+                    render();
+                };
+            });
+            document.getElementById('move-modal').classList.remove('hidden');
+        };
+
+        document.getElementById('close-move-modal').onclick = () => document.getElementById('move-modal').classList.add('hidden');
+        document.getElementById('cancel-import-btn').onclick = () => document.getElementById('import-modal').classList.add('hidden');
+
+        document.getElementById('confirm-import-btn').onclick = () => {
+            const textarea = document.getElementById('import-textarea');
+            const names = textarea.value.split('\n').map(n => n.trim()).filter(n => n.length > 0);
+            if (names.length > 0) {
+                const targetGroup = appData.elementary[currentContext.currentYear].groups[0];
+                names.forEach(name => {
+                    targetGroup.members.push({ 
+                        id: 'm_' + Date.now() + Math.random().toString(36).substr(2, 4), 
+                        name 
+                    });
+                });
+                saveToCloud();
+                textarea.value = '';
+                document.getElementById('import-modal').classList.add('hidden');
+                render();
+            }
+        };
+
+        // اضغط Enter للدخول
+        document.getElementById('password-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkPassword();
+        });
+
+        // تعيين الشهر الحالي
+        document.getElementById('month-selector').value = new Date().getMonth();
+
+        onAuthStateChanged(auth, (user) => {
+            currentContext.user = user;
+            if (user) {
+                console.log("✅ المستخدم مسجل دخول:", user.uid);
+            } else {
+                console.log("⚠️ لا يوجد مستخدم مسجل");
+                showLoading(false);
+            }
+        });
+
+        const init = async () => {
+            showLoading(true);
+            try {
+                await signInAnonymously(auth);
+                console.log("✅ تم تسجيل الدخول بنجاح");
+            } catch (e) {
+                console.error("❌ فشل تسجيل الدخول:", e);
+                alert("فشل الاتصال بقاعدة البيانات!");
+            }
+            showLoading(false);
+        };
+
+        init();
+    </script>
+</body>
+</html>
